@@ -1,7 +1,7 @@
 # saturn.fm
 Welcome to saturn.fm, a place where you can enjoy calming music while you study. From piano to jazz, this TUI can play it all!
 
-![Demo1](demo1.gif) ![Demo2](demo2.gif)
+![Demo1](demo.gif) ![Demo2](demo2.gif)
 
 To start the TUI, simply enter:
 ```
