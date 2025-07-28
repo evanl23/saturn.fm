@@ -1,0 +1,522 @@
+#!/usr/bin/env bash
+#
+# Based on Nightfall TUI by Dave Eddy, but reimagined with Saturn visuals.
+# The Saturn animation cycles through colors when music is playing,
+# and stops when music is paused.
+
+TAGLINE='Saturn.FM - Cosmic Studying Experience'
+WEBSITE='https://github.com/evanl23/saturn.fm'
+
+# Requirements
+MIN_COLUMNS=166
+MIN_LINES=49
+
+# Global state
+BG_JOB=
+NOW_PLAYING=false
+PIPE=
+CURRENT_FRAME=0
+IS_PLAYING=false
+BASE_URL="saturn.eliu.sh"
+CURRENT_MUSIC_FILE=""
+
+# sleep wrapper that silently fails
+_sleep() {
+	sleep "$1" &>/dev/null
+}
+
+# pure-bash impl of *some* tput subcommands - optimized for performance
+tput() {
+	local ESC=$'\x1b'
+	case "$1" in
+		sgr0) echo -n "$ESC[0m";;
+		bold) echo -n "$ESC[1m";;
+		setaf) echo -n "$ESC[38;5;$2m";;
+		setab) echo -n "$ESC[48;5;$2m";;
+		sc) echo -n "$ESC[7";;
+		rc) echo -n "$ESC[8";;
+		cnorm) echo -n "$ESC[?25h";;
+		civis) echo -n "$ESC[?25l";;
+		smcup) echo -n "$ESC[?1049h";;
+		rmcup) echo -n "$ESC[?1049l";;
+		clear) echo -n "$ESC[2J";;
+		cup)
+			local row=$(($2 + 1))
+			local col=$(($3 + 1))
+			echo -n "$ESC[$row;${col}H";;
+		'') return 1;;
+		*)
+			# not implemented - default to external command
+			command tput "$@"
+			;;
+	esac
+}
+
+# print error and die
+fatal() {
+	tput setaf 1
+	echo "[error]" "$@" >&2
+	tput sgr0
+	exit 1
+}
+
+# called when the process exits
+cleanup() {
+	# reset the terminal
+	tput cnorm
+	tput rmcup
+	stty echo 2>/dev/null
+
+	# stop any music and remove the pipe
+	stop_music
+	if [[ -n $PIPE ]]; then
+		echo "removing pipe: $PIPE"
+		rm -f "$PIPE"
+	fi
+
+  rm -rf "$TMP_FRAME_DIR"
+
+	# call to action
+	echo
+	echo 'Thanks for listening, check out the source code below!'
+	tput setaf 207
+	echo "=> $WEBSITE"
+	echo
+
+	# look for any stray ffplay processes
+	tput setaf 1
+	local output
+	output=$(pgrep ffplay 2>/dev/null)
+	if [[ -n $output ]]; then
+		echo '!!! warning: stray ffplay processes possibly found !!!'
+		echo 'IF YOU ARE STILL HEARING MUSIC try running the following'
+		echo 'and killing any pids found'
+		echo
+		echo '$ pgrep ffplay'
+		echo
+	fi
+
+	tput sgr0
+}
+
+draw-box() {
+	local offset=$1
+
+	# full line
+	local line=''
+	for ((i = 0; i < COLUMNS - (offset * 2 * 2); i++)); do
+		line+=' '
+	done
+
+	# draw top line
+	tput cup "$offset" "$((offset * 2))"
+	echo -n "$line"
+
+	# draw bottom line
+	tput cup "$((LINES - offset - 1))" "$((offset * 2))"
+	echo -n "$line"
+
+	_sleep .035
+
+	# draw left side line
+	local x=$((offset * 2))
+	for ((i = offset; i < LINES - offset - 1; i++)); do
+		tput cup "$i" "$x"
+		echo -n '  '
+	done
+
+	# draw right side line
+	local x=$((COLUMNS - (offset * 2) - 2))
+	for ((i = offset; i < LINES - offset - 1; i++)); do
+		tput cup "$i" "$x"
+		echo -n '  '
+	done
+
+	_sleep .035
+}
+
+# draw only the Saturn frame (no screen clearing to prevent flicker)
+draw_saturn_frame() { 
+  local frame_file="$TMP_FRAME_DIR/saturn-frames/frame${CURRENT_FRAME}.txt"
+  
+  local frame_width=136
+  local frame_height=40  # approximate height of Saturn frames
+
+  # Center both horizontally and vertically, then adjust up and right
+  local row_pos=$(( (LINES - frame_height) / 2 - 5 ))  # Move up by 5 rows
+  local col_pos=$(( (COLUMNS - frame_width) / 2 - 10 )) # Move right by 10 columns
+
+  # Ensure we don't go negative or beyond screen bounds
+  if (( col_pos < 0 )); then
+    col_pos=0
+  fi
+  if (( row_pos < 0 )); then
+    row_pos=0
+  fi
+
+  if [[ -f "$frame_file" ]]; then
+    local line_num=0
+    while IFS= read -r line; do
+      tput cup "$((row_pos + line_num))" "$col_pos"
+      printf "%s" "$line"
+      ((line_num++))
+    done < "$frame_file"
+  fi
+}
+
+# draw only the user menu at the bottom
+draw_menu() {
+	local menu_row=$((LINES - 4))
+	local center_col=$((COLUMNS / 2))
+
+	local status_text
+	if $IS_PLAYING; then
+		status_text="♪ SATURN.FM - PLAYING ♪"
+	else
+		status_text="♫ SATURN.FM - STOPPED ♫"
+	fi
+
+	local controls_text="[ENTER] Play/Stop    [n] Skip    [q] Quit"
+
+	local song_name="${CURRENT_MUSIC_FILE##*/}"
+	song_name="${song_name%.*}"
+
+	# Draw current song
+	tput cup "$((menu_row - 2))" 0
+	printf '%-*s' "$COLUMNS" " "  # clear entire line
+	local playing_start=$(( (COLUMNS - ${#song_name} - 14) / 2 ))
+	tput cup "$((menu_row - 2))" "$playing_start"
+	tput setaf 63
+	tput bold
+	if $IS_PLAYING; then
+		printf 'Now playing: %s' "$song_name"
+	else
+		printf '             '
+	fi
+
+	# Clear the status line first, then draw centered text
+	tput cup "$menu_row" 0
+	printf '%-*s' "$COLUMNS" " "  # clear entire line
+	local status_start=$(( (COLUMNS - ${#status_text}) / 2 ))
+	tput cup "$menu_row" "$status_start"
+	tput sgr0
+	tput bold
+	printf '%s' "$status_text"
+
+	# Clear the controls line first, then draw centered text
+	tput cup $((menu_row + 2)) 0
+	printf '%-*s' "$COLUMNS" " "  # clear entire line
+	local controls_start=$(( (COLUMNS - ${#controls_text}) / 2 ))
+	tput cup $((menu_row + 2)) "$controls_start"
+	tput setaf 63
+	printf '%s' "$controls_text"
+
+	tput sgr0
+}
+
+# initial setup - clear screen and draw both elements
+init_display() {
+	tput clear
+	draw_saturn_frame
+	draw_menu
+}
+
+# stop any music currently playing
+stop_music() {
+	if [[ -n $BG_JOB ]]; then
+		kill "$BG_JOB" 2>/dev/null
+		BG_JOB=
+	fi
+	IS_PLAYING=false
+}
+
+make_url() {
+  curl -s "http://$BASE_URL/songs/" | grep -oE 'href="[^"]+\.(mp3|wav|m4a|ogg|flac)"' | cut -d'"' -f2 | shuf -n 1 | awk -v base="http://$BASE_URL/songs/" '{ print base $0 }'	
+}
+
+# play a random music file
+play_music() {
+	# stop any existing music
+	stop_music
+	
+	CURRENT_MUSIC_FILE=$(make_url)
+
+	if [[ -z "$CURRENT_MUSIC_FILE" ]]; then
+		# no music files found, create a demo tone
+		CURRENT_MUSIC_FILE="Demo Music"
+		demo_music_task <&- &
+	else
+		# play the found music file
+		play_music_task "$CURRENT_MUSIC_FILE" <&- &
+	fi
+}
+
+# background task to play music and report status
+play_music_task() {
+	local file="$1"
+	
+	# use ffplay to play the file
+	ffplay -hide_banner -loglevel panic -autoexit -nodisp "$file" &
+	
+	local pid=$!
+	echo 'music-start' "$pid" >&3
+	
+	wait "$pid"
+	local code=$?
+	echo 'music-stop' "$pid" "$code" >&3
+}
+
+# demo music task (plays a tone if no music files are found)
+demo_music_task() {
+	# generate a simple tone using speaker-test or similar
+	(sleep 5) &  # placeholder - just sleep for 5 seconds as demo
+	
+	local pid=$!
+	echo 'music-start' "$pid" >&3
+	
+	wait "$pid"
+	local code=$?
+	echo 'music-stop' "$pid" "$code" >&3
+}
+
+# background task to read keyboard events
+read_keyboard_events_task() {
+	local escape_char=$'\x1b'
+	while true; do
+		local data=
+		read -rsn1 data 2>/dev/null || return
+		if [[ $data == "$escape_char" ]]; then
+			read -rsn2 data 2>/dev/null || return
+		fi
+
+		local output=
+		case "$data" in
+			'q') output='key-quit';;   # q for quit
+			'') output='key-enter';;  # enter key
+      'n') output='key-next';;   # n for next song
+		esac
+
+		if [[ -n $output ]]; then
+			echo "$output" >&3
+		fi
+	done
+}
+
+main() {
+	# ensure we can play music (ffplay is available)
+	if ! command -v ffplay &>/dev/null; then
+		echo 'ffplay (by ffmpeg) required for music playback'
+		echo 'install "ffmpeg" with your package manager and try again'
+		fatal 'ffplay not found'
+	fi
+  
+  # ensure music shuffler command is available
+  if ! command -v shuf &>/dev/null; then
+    echo 'shuf (by GNU) required for music shuffle'
+    echo 'install shuf through coreutils with your package manager and try again'
+    fatal 'shuf is not found'
+  fi
+
+	# ensure we are called interactively
+	if [[ ! -t 1 ]]; then
+		fatal 'stdout must be a terminal'
+	fi
+
+	# open the terminal for keyboard input
+	exec 4</dev/tty || fatal 'no terminal detected'
+
+	# try to load the sleep builtin - we don't care if this fails
+	enable sleep 2>/dev/null
+
+	# figure out window size
+	shopt -s checkwinsize
+	(:)  # force update of COLUMNS and LINES
+
+	local cols=$COLUMNS
+	local lines=$LINES
+
+	# fallback to external tools if bash < 4
+	if [[ -z $cols || -z $lines ]]; then
+		cols=$(tput cols)
+		lines=$(tput lines)
+	fi
+
+	# ensure terminal size is correct
+	if [[ -z $cols || -z $lines ]]; then
+		fatal 'cannot determine terminal size'
+	fi
+
+	echo "terminal size: ${cols}x$lines"
+	if ((cols < MIN_COLUMNS || lines < MIN_LINES)); then
+		fatal 'terminal is too small to display Saturn.FM:' \
+		    "must be >= ${MIN_COLUMNS}x${MIN_LINES}"
+	fi
+
+	# ensure these are at least initialized
+	COLUMNS=$cols
+	LINES=$lines
+
+	# create the FIFO used for communication between tasks
+	PIPE=/tmp/saturn.$$
+	mkfifo "$PIPE" || fatal "failed to create pipe $PIPE"
+	exec 3<>"$PIPE" || fatal "failed to open pipe $PIPE"
+	echo "created FIFO pipe: $PIPE"
+	echo 'use [ENTER] to play/stop music, [n] to skip to next song, and [q] to quit'
+  
+  # cleanup when program exits
+	trap cleanup exit
+
+	# get the terminal ready for drawing
+	tput smcup
+	tput civis
+	stty -echo
+  
+  tput clear
+  
+  # Show loading message while downloading frames
+  echo "Downloading Saturn animation frames..."
+  
+  # create tmp directory for saturn frames
+  TMP_FRAME_DIR="/tmp/saturn_frames.$$"
+  mkdir -p "$TMP_FRAME_DIR"  
+  
+  # Download frames FIRST, wait for completion to avoid CPU contention
+  if ! curl -s "http://$BASE_URL/saturn-frames.tar.gz" | tar -xz -C "$TMP_FRAME_DIR"; then
+    fatal "Failed to download Saturn frames"
+  fi
+  
+  echo "Frames downloaded, starting Saturn.FM..."
+  
+  # Now do the startup animation after download is complete
+  tput clear
+  tput setab 165; draw-box 23;
+  tput setab 164; draw-box 22;
+  tput setab 163; draw-box 21;
+  tput setab 162; draw-box 20; 
+  tput setab 161; draw-box 19;
+  tput setab 160; draw-box 18;
+  tput setab 129; draw-box 17;
+  tput setab 128; draw-box 16;
+  tput setab 127; draw-box 15;
+  tput setab 126; draw-box 14;
+  tput setab 125; draw-box 13;
+  tput setab 124; draw-box 12;
+  tput setab 93; draw-box 11;
+  tput setab 92; draw-box 10;
+  tput setab 91; draw-box 9;
+  tput setab 90; draw-box 8;
+  tput setab 89; draw-box 7;
+  tput setab 88; draw-box 6;
+  tput setab 57; draw-box 5;
+  tput setab 56; draw-box 4;
+  tput setab 55; draw-box 3;
+  tput setab 54; draw-box 2;
+  tput setab 53; draw-box 1;
+  tput setab 52; draw-box 0;
+  sleep 1
+
+  tput sgr0
+
+	# count available frames
+	local frame_count
+	frame_count=$(ls $TMP_FRAME_DIR/saturn-frames/frame*.txt 2>/dev/null | wc -l)
+	if ((frame_count == 0)); then
+		fatal 'no Saturn frame files found in saturn-frames/'
+	fi
+	echo "found $frame_count Saturn animation frames"
+
+	# draw initial UI
+	init_display
+
+	# start reading keyboard events in the background
+	read_keyboard_events_task <&4 &
+
+	# main event loop - hybrid approach for animations and events
+	local data
+	local last_playing_state=$IS_PLAYING
+	local frame_interval=7  # update frame every 10 loops (about 0.1 seconds)
+	local loop_count=0
+  
+  play_music
+	while true; do
+		# check for events with very short timeout
+		if read -t 0.01 -ra data <&3 2>/dev/null; then
+			# we have read an event!
+			local event=${data[0]}
+			local args=("${data[@]:1}")
+
+			case "$event" in
+				key-enter)
+					if $IS_PLAYING; then
+						stop_music
+					else
+						play_music
+					fi
+					# update menu immediately after key press
+					draw_menu
+					;;
+				key-quit)
+					exit 0
+					;;
+        key-next)
+          stop_music
+          play_music
+          ;;
+				music-start)
+					# music started playing - record the PID
+					local pid=${args[0]}
+					
+					# kill any existing music (shouldn't happen, but just in case)
+					if [[ -n $BG_JOB ]]; then
+						kill "$BG_JOB" 2>/dev/null
+					fi
+					
+					BG_JOB=$pid
+					IS_PLAYING=true
+					# update menu when music starts
+					draw_menu
+					;;
+				music-stop)
+					local pid=${args[0]}
+					local code=${args[1]}
+					
+					# some other pid may have taken over this spot
+					if [[ $BG_JOB == "$pid" ]]; then
+						BG_JOB=
+						IS_PLAYING=false
+						
+						# if music finished cleanly (exit code 0), auto-play next random song
+						if ((code == 0)); then
+							# play next random song automatically 
+							play_music
+						else
+							# music was stopped manually or errored - update menu
+							draw_menu
+						fi
+					fi
+					;;
+			esac
+		fi
+
+		# animate and redraw Saturn at regular intervals
+		((loop_count++))
+		if ((loop_count >= frame_interval)); then
+			# animate Saturn frame only when music is playing
+			if $IS_PLAYING; then
+				((CURRENT_FRAME = (CURRENT_FRAME + 1) % frame_count))
+				# only redraw Saturn frame when animating
+				draw_saturn_frame 
+			fi
+			
+			loop_count=0
+		fi
+		
+		# small delay to prevent excessive CPU usage
+		_sleep 0.01
+	done
+
+	fatal 'not reached'
+}
+
+main "$@"
+
