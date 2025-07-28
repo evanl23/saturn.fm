@@ -65,7 +65,7 @@ cleanup() {
 	# reset the terminal
 	tput cnorm
 	tput rmcup
-	stty echo 2>/dev/null
+	stty echo < /dev/tty 2>/dev/null
 
 	# stop any music and remove the pipe
 	stop_music
@@ -74,7 +74,7 @@ cleanup() {
 		rm -f "$PIPE"
 	fi
 
-  rm -rf "$TMP_FRAME_DIR"
+	rm -rf "$TMP_FRAME_DIR"
 
 	# call to action
 	echo
@@ -284,16 +284,16 @@ read_keyboard_events_task() {
 	local escape_char=$'\x1b'
 	while true; do
 		local data=
-		read -rsn1 data 2>/dev/null || return
+		read -rsn1 data < /dev/tty 2>/dev/null || return
 		if [[ $data == "$escape_char" ]]; then
-			read -rsn2 data 2>/dev/null || return
+			read -rsn2 data < /dev/tty 2>/dev/null || return
 		fi
 
 		local output=
 		case "$data" in
 			'q') output='key-quit';;   # q for quit
 			'') output='key-enter';;  # enter key
-      'n') output='key-next';;   # n for next song
+      			'n') output='key-next';;   # n for next song
 		esac
 
 		if [[ -n $output ]]; then
@@ -310,12 +310,12 @@ main() {
 		fatal 'ffplay not found'
 	fi
   
-  # ensure music shuffler command is available
-  if ! command -v shuf &>/dev/null; then
-    echo 'shuf (by GNU) required for music shuffle'
-    echo 'install shuf through coreutils with your package manager and try again'
-    fatal 'shuf is not found'
-  fi
+	# ensure music shuffler command is available
+	if ! command -v shuf &>/dev/null; then
+		echo 'shuf (by GNU) required for music shuffle'
+		echo 'install shuf through coreutils with your package manager and try again'
+		fatal 'shuf is not found'
+	fi
 
 	# ensure we are called interactively
 	if [[ ! -t 1 ]]; then
@@ -363,59 +363,59 @@ main() {
 	echo "created FIFO pipe: $PIPE"
 	echo 'use [ENTER] to play/stop music, [n] to skip to next song, and [q] to quit'
   
-  # cleanup when program exits
+	# cleanup when program exits
 	trap cleanup exit
 
 	# get the terminal ready for drawing
 	tput smcup
 	tput civis
-	stty -echo
+	stty -echo < /dev/tty 2>/dev/null
   
-  tput clear
+	tput clear
   
-  # Show loading message while downloading frames
-  echo "Downloading Saturn animation frames..."
+ 	# Show loading message while downloading frames
+  	echo "Downloading Saturn animation frames..."
   
-  # create tmp directory for saturn frames
-  TMP_FRAME_DIR="/tmp/saturn_frames.$$"
-  mkdir -p "$TMP_FRAME_DIR"  
+	# create tmp directory for saturn frames
+	TMP_FRAME_DIR="/tmp/saturn_frames.$$"
+	mkdir -p "$TMP_FRAME_DIR"  
   
-  # Download frames FIRST, wait for completion to avoid CPU contention
-  if ! curl -s "http://$BASE_URL/saturn-frames.tar.gz" | tar -xz -C "$TMP_FRAME_DIR"; then
-    fatal "Failed to download Saturn frames"
-  fi
+	# Download frames FIRST, wait for completion to avoid CPU contention
+	if ! curl -s "http://$BASE_URL/saturn-frames.tar.gz" | tar -xz -C "$TMP_FRAME_DIR"; then
+		fatal "Failed to download Saturn frames"
+	fi
   
-  echo "Frames downloaded, starting Saturn.FM..."
+  	echo "Frames downloaded, starting Saturn.FM..."
   
-  # Now do the startup animation after download is complete
-  tput clear
-  tput setab 165; draw-box 23;
-  tput setab 164; draw-box 22;
-  tput setab 163; draw-box 21;
-  tput setab 162; draw-box 20; 
-  tput setab 161; draw-box 19;
-  tput setab 160; draw-box 18;
-  tput setab 129; draw-box 17;
-  tput setab 128; draw-box 16;
-  tput setab 127; draw-box 15;
-  tput setab 126; draw-box 14;
-  tput setab 125; draw-box 13;
-  tput setab 124; draw-box 12;
-  tput setab 93; draw-box 11;
-  tput setab 92; draw-box 10;
-  tput setab 91; draw-box 9;
-  tput setab 90; draw-box 8;
-  tput setab 89; draw-box 7;
-  tput setab 88; draw-box 6;
-  tput setab 57; draw-box 5;
-  tput setab 56; draw-box 4;
-  tput setab 55; draw-box 3;
-  tput setab 54; draw-box 2;
-  tput setab 53; draw-box 1;
-  tput setab 52; draw-box 0;
-  sleep 1
-
-  tput sgr0
+	# Now do the startup animation after download is complete
+	tput clear
+	tput setab 165; draw-box 23;
+	tput setab 164; draw-box 22;
+	tput setab 163; draw-box 21;
+	tput setab 162; draw-box 20; 
+	tput setab 161; draw-box 19;
+	tput setab 160; draw-box 18;
+	tput setab 129; draw-box 17;
+	tput setab 128; draw-box 16;
+	tput setab 127; draw-box 15;
+	tput setab 126; draw-box 14;
+	tput setab 125; draw-box 13;
+	tput setab 124; draw-box 12;
+	tput setab 93; draw-box 11;
+	tput setab 92; draw-box 10;
+	tput setab 91; draw-box 9;
+	tput setab 90; draw-box 8;
+	tput setab 89; draw-box 7;
+	tput setab 88; draw-box 6;
+	tput setab 57; draw-box 5;
+	tput setab 56; draw-box 4;
+	tput setab 55; draw-box 3;
+	tput setab 54; draw-box 2;
+	tput setab 53; draw-box 1;
+	tput setab 52; draw-box 0;
+	sleep 1
+	
+	tput sgr0
 
 	# count available frames
 	local frame_count
@@ -437,7 +437,7 @@ main() {
 	local frame_interval=7  # update frame every 10 loops (about 0.1 seconds)
 	local loop_count=0
   
-  play_music
+	play_music
 	while true; do
 		# check for events with very short timeout
 		if read -t 0.01 -ra data <&3 2>/dev/null; then
@@ -458,10 +458,10 @@ main() {
 				key-quit)
 					exit 0
 					;;
-        key-next)
-          stop_music
-          play_music
-          ;;
+			        key-next)
+			          stop_music
+			          play_music
+			          ;;
 				music-start)
 					# music started playing - record the PID
 					local pid=${args[0]}
@@ -519,4 +519,3 @@ main() {
 }
 
 main "$@"
-
