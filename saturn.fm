@@ -7,6 +7,7 @@
 TAGLINE='Saturn.FM - Cosmic Studying Experience'
 WEBSITE='https://github.com/evanl23/saturn.fm'
 
+# ASCII art will be read from a here-document in the draw_title function
 # Requirements
 MIN_COLUMNS=166
 MIN_LINES=49
@@ -116,7 +117,7 @@ draw-box() {
 	tput cup "$((LINES - offset - 1))" "$((offset * 2))"
 	echo -n "$line"
 
-	_sleep .035
+	_sleep .05
 
 	# draw left side line
 	local x=$((offset * 2))
@@ -132,7 +133,7 @@ draw-box() {
 		echo -n '  '
 	done
 
-	_sleep .035
+	_sleep .05
 }
 
 # draw only the Saturn frame (no screen clearing to prevent flicker)
@@ -212,6 +213,50 @@ draw_menu() {
 	printf '%s' "$controls_text"
 
 	tput sgr0
+}
+
+draw_title() {
+  local max_width=0
+  local line_count=0
+  
+  # Read the ASCII art to find its dimensions
+  while IFS= read -r line; do
+    local line_length=${#line}
+    if (( line_length > max_width )); then
+      max_width=$line_length
+    fi
+    ((line_count++))
+  done << 'EOF'
+ ▗▄▄▖     ▗▄▖     ▗▄▄▄▖    ▗▖ ▗▖    ▗▄▄▖     ▗▖  ▗▖                ▗▄▄▄▖    ▗▖  ▗▖
+▐▌       ▐▌ ▐▌      █      ▐▌ ▐▌    ▐▌ ▐▌    ▐▛▚▖▐▌                ▐▌       ▐▛▚▞▜▌
+ ▝▀▚▖    ▐▛▀▜▌      █      ▐▌ ▐▌    ▐▛▀▚▖    ▐▌ ▝▜▌                ▐▛▀▀▘    ▐▌  ▐▌
+▗▄▄▞▘    ▐▌ ▐▌      █      ▝▚▄▞▘    ▐▌ ▐▌    ▐▌  ▐▌       ▐▌       ▐▌       ▐▌  ▐▌
+EOF
+  
+  # Calculate centered position
+  local row_pos=$(( (LINES - line_count) / 2 ))
+  local col_pos=$(( (COLUMNS - max_width) / 2 ))
+  
+  if (( col_pos < 0 )); then
+    col_pos=0
+  fi
+  if (( row_pos < 0 )); then
+    row_pos=0
+  fi
+  
+  # Draw the ASCII art
+  tput sgr0 
+  local line_num=0
+  while IFS= read -r line; do
+    tput cup "$((row_pos + line_num))" "$col_pos"
+    printf "%s" "$line"
+    ((line_num++))
+  done << 'EOF'
+ ▗▄▄▖     ▗▄▖     ▗▄▄▄▖    ▗▖ ▗▖    ▗▄▄▖     ▗▖  ▗▖                ▗▄▄▄▖    ▗▖  ▗▖
+▐▌       ▐▌ ▐▌      █      ▐▌ ▐▌    ▐▌ ▐▌    ▐▛▚▖▐▌                ▐▌       ▐▛▚▞▜▌
+ ▝▀▚▖    ▐▛▀▜▌      █      ▐▌ ▐▌    ▐▛▀▚▖    ▐▌ ▝▜▌                ▐▛▀▀▘    ▐▌  ▐▌
+▗▄▄▞▘    ▐▌ ▐▌      █      ▝▚▄▞▘    ▐▌ ▐▌    ▐▌  ▐▌       ▐▌       ▐▌       ▐▌  ▐▌
+EOF
 }
 
 # initial setup - clear screen and draw both elements
@@ -389,7 +434,7 @@ main() {
   
 	# Now do the startup animation after download is complete
 	tput clear
-	tput setab 165; draw-box 23;
+	draw_title
 	tput setab 164; draw-box 22;
 	tput setab 163; draw-box 21;
 	tput setab 162; draw-box 20; 
@@ -413,7 +458,7 @@ main() {
 	tput setab 54; draw-box 2;
 	tput setab 53; draw-box 1;
 	tput setab 52; draw-box 0;
-	sleep 1
+	sleep 1.5
 	
 	tput sgr0
 
