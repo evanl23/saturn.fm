@@ -1,9 +1,10 @@
 # saturn.fm
-Welcome to saturn.fm, a place where you can enjoy calming music while you study. From piano to jazz, this TUI can play it all!
+Welcome to saturn.fm, a place for jazz fans and those who seek peace and solitude in the calming tunes of the saxophone. Put on your headphones, lean back your chair, and let the voices of saturn.fm take you to the stars and beyond.
 
-![Demo1](demo.gif) ![Demo2](demo2.gif)
+![demogif](demo.gif)
 
-To start the TUI, simply enter:
+## Installation
+To begin your journey, simply enter:
 ```
 curl saturn.eliu.sh | bash
 ```
@@ -20,16 +21,14 @@ saturn.fm
 ```
 
 ## Requirements
-Terminal must support true color (24 bit), or else some colors will not render correctly. 
-
-This program also relies on several external tools: 
+Terminal must support true color (24 bit), or else some colors will not render correctly. This program also relies on several external tools: 
 
 FFplay (FFmpeg), which can be installed by: 
 ```
 brew install ffmpeg
 ```
 
-and shuf, which is a part of GNU Coreutils and can be installed by: 
+and GNU Coreutils, which can be installed by: 
 ```
 brew install coreutils
 ```
