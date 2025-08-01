@@ -14,6 +14,7 @@ MIN_LINES=49
 
 # Global state
 BG_JOB=
+AMPLITUDE_JOB=
 NOW_PLAYING=false
 PIPE=
 CURRENT_FRAME=0
@@ -75,7 +76,16 @@ cleanup() {
 		rm -f "$PIPE"
 	fi
 
-	rm -rf "$TMP_FRAME_DIR"
+  if [[ -n $TMP_FRAME_DIR ]]; then
+    echo "removing temporary frame directory: $TMP_FRAME_DIR"
+	  rm -rf "$TMP_FRAME_DIR"
+  fi
+  
+  # Clean up any remaining ffmpeg processes (using global AMPLITUDE_JOB)
+  if [[ -n "$AMPLITUDE_JOB" ]]; then 
+    kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
+    wait "$AMPLITUDE_JOB" 2>/dev/null || true
+  fi
 
 	# call to action
 	echo
@@ -94,6 +104,19 @@ cleanup() {
 		echo 'and killing any pids found'
 		echo
 		echo '$ pgrep ffplay'
+		echo
+	fi
+
+	# look for any stray ffmpeg processes (same pattern as ffplay)
+	local ffmpeg_output
+	ffmpeg_output=$(pgrep ffmpeg 2>/dev/null)
+	if [[ -n $ffmpeg_output ]]; then
+		echo '!!! warning: stray ffmpeg processes possibly found !!!'
+		echo 'These may be leftover amplitude analysis processes'
+		echo 'IF YOU ARE STILL SEEING ISSUES try running the following'
+		echo 'and killing any pids found'
+		echo
+		echo '$ pgrep ffmpeg'
 		echo
 	fi
 
@@ -272,6 +295,12 @@ stop_music() {
 		kill "$BG_JOB" 2>/dev/null
 		BG_JOB=
 	fi
+  if [[ -n $AMPLITUDE_JOB ]]; then
+		# Kill the ffmpeg process group (includes all subprocesses/pipes)
+		kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
+		wait "$AMPLITUDE_JOB" 2>/dev/null || true
+		AMPLITUDE_JOB=
+	fi
 	IS_PLAYING=false
 }
 
@@ -302,13 +331,46 @@ play_music_task() {
 	
 	# use ffplay to play the file
 	ffplay -hide_banner -loglevel panic -autoexit -nodisp "$file" &
+	local ffplay_pid=$!
+  
+  frame_count=0
+  skip_n=5  # Only process 1 of every 5 frames
+
+  # start amplitude reader in background
+  (
+    exec ffmpeg -i "$file" -vn -af "astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level" -f null - 2>&1 | grep --line-buffered "lavfi.astats.Overall.RMS_level" | stdbuf -oL awk -F'=' '/RMS_level/ { print $2 }' | while read -r db; do
+      [[ -z "$db" ]] && continue
+
+      frame_count=$((frame_count + 1))
+      if (( frame_count % skip_n != 0 )); then
+        continue  # Skip this frame
+      fi
+
+      clamped=$(awk -v d="$db" 'BEGIN { print (d < -50 ? -50 : (d > 0 ? 0 : d)) }')
+      index=$(awk -v d="$clamped" 'BEGIN { printf "%02d", int(98 * (50 + d) / 50) }')
+      # Write frame update to pipe if it exists
+      if [[ -p "$PIPE" ]]; then
+        echo "frame-update" "$index" >&3 2>/dev/null || true
+      fi
+      sleep 0.09
+    done
+  ) &
+  local ffmpeg_pid=$!
+
+	# Store both PIDs for cleanup
+	echo 'music-start' "$ffplay_pid" "$ffmpeg_pid" >&3 2>/dev/null || true
 	
-	local pid=$!
-	echo 'music-start' "$pid" >&3
-	
-	wait "$pid"
+	wait "$ffplay_pid"
 	local code=$?
-	echo 'music-stop' "$pid" "$code" >&3
+
+	# Improved cleanup for ffmpeg
+	# Ensure ffmpeg ends after ffplay
+	if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+	    kill -- -"$ffmpeg_pid" 2>/dev/null || true
+		wait "$ffmpeg_pid" 2>/dev/null || true
+	fi
+
+	echo 'music-stop' "$ffplay_pid" "$code" >&3 2>/dev/null || true
 }
 
 # demo music task (plays a tone if no music files are found)
@@ -338,7 +400,7 @@ read_keyboard_events_task() {
 		case "$data" in
 			'q') output='key-quit';;   # q for quit
 			'') output='key-enter';;  # enter key
-      			'n') output='key-next';;   # n for next song
+      'n') output='key-next';;   # n for next song
 		esac
 
 		if [[ -n $output ]]; then
@@ -503,23 +565,35 @@ main() {
 				key-quit)
 					exit 0
 					;;
-			        key-next)
-			          stop_music
-			          play_music
-			          ;;
+			  key-next)
+	        stop_music
+          play_music
+          ;;
 				music-start)
-					# music started playing - record the PID
-					local pid=${args[0]}
+          # music started playing - record the PIDs
+					local ffplay_pid=${args[0]}
+					local ffmpeg_pid=${args[1]}
 					
 					# kill any existing music (shouldn't happen, but just in case)
 					if [[ -n $BG_JOB ]]; then
 						kill "$BG_JOB" 2>/dev/null
 					fi
+					if [[ -n $AMPLITUDE_JOB ]]; then
+						# Kill the ffmpeg process group (includes all subprocesses/pipes)
+						kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
+						wait "$AMPLITUDE_JOB" 2>/dev/null || true
+					fi
 					
-					BG_JOB=$pid
+					BG_JOB=$ffplay_pid
+					AMPLITUDE_JOB=$ffmpeg_pid
 					IS_PLAYING=true
 					# update menu when music starts
 					draw_menu
+					;;
+        frame-update)
+					# update current frame from amplitude analysis
+					local new_frame=${args[0]}
+					CURRENT_FRAME="$new_frame"
 					;;
 				music-stop)
 					local pid=${args[0]}
@@ -543,19 +617,10 @@ main() {
 			esac
 		fi
 
-		# animate and redraw Saturn at regular intervals
-		((loop_count++))
-		if ((loop_count >= frame_interval)); then
-			# animate Saturn frame only when music is playing
-			if $IS_PLAYING; then
-				((CURRENT_FRAME = (CURRENT_FRAME + 1) % frame_count))
-				# only redraw Saturn frame when animating
-				draw_saturn_frame 
-			fi
-			
-			loop_count=0
+		if $IS_PLAYING; then
+			draw_saturn_frame 
 		fi
-		
+			
 		# small delay to prevent excessive CPU usage
 		_sleep 0.01
 	done
