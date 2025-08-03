@@ -328,11 +328,11 @@ play_music() {
 # background task to play music and report status
 play_music_task() {
 	local file="$1"
-	
+ 
 	# use ffplay to play the file
 	ffplay -hide_banner -loglevel panic -autoexit -nodisp "$file" &
-	local ffplay_pid=$!
-  
+  local ffplay_pid=$!
+
   frame_count=0
   skip_n=5  # Only process 1 of every 5 frames
 
@@ -352,12 +352,12 @@ play_music_task() {
       if [[ -p "$PIPE" ]]; then
         echo "frame-update" "$index" >&3 2>/dev/null || true
       fi
-      sleep 0.09
+      sleep 0.13
     done
   ) &
   local ffmpeg_pid=$!
 
-	# Store both PIDs for cleanup
+  # Store both PIDs for cleanup
 	echo 'music-start' "$ffplay_pid" "$ffmpeg_pid" >&3 2>/dev/null || true
 	
 	wait "$ffplay_pid"
