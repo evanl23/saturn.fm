@@ -44,6 +44,7 @@ Feel free to add potential features or songs of the similar nature by opening PR
 | A Familiar Room | Aaron Cherof |
 | A Remark You Made | Weather Report |
 | After the Rain | John Coltrane |
+| Badge and gun | Sunglasses Kid |
 | Blade Runner Blues | Vangelis | 
 | Dawn in LA | Bolden. |
 | Deep in it | berlioz |
