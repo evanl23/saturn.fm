@@ -9,7 +9,7 @@ To begin your journey, simply enter:
 curl saturn.eliu.sh | bash
 ```
 
-Or install via [Homebrew](https://brew.sh) for a more reliable experience (recommended):
+Or install via [Homebrew](https://brew.sh) for a more reliable experience:
 ```bash
 brew tap evanl23/homebrew-formulae
 brew install saturn-fm
