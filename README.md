@@ -45,8 +45,7 @@ Feel free to add potential features or songs of the similar nature by opening PR
 | A Remark You Made | Weather Report |
 | After the Rain | John Coltrane |
 | Badge and gun | Sunglasses Kid |
-| Blade Runner Blues | Vangelis |
-| Case Closed | loopgarden |
+| Blade Runner Blues | Vangelis | 
 | Dawn in LA | Bolden. |
 | Deep in it | berlioz |
 | Einsamer Hirte | Gheorghe Zamfir | 
@@ -57,21 +56,15 @@ Feel free to add potential features or songs of the similar nature by opening PR
 | I Still Can't Sleep | Bernard Herrmann |
 | In a Sentimental Mood | Bob Crosby |
 | Infant Eyes | Wayne Shorter |
-| Iris' Secret | loopgarden | 
-| Jupiter Jazz | Haruki |
 | LISA | Lush Crayon |
 | Letting Go | Joshua Redman |
 | Love Theme | Vangelis |
 | Muna's Dream | Jaleel Shaw |
 | Muna's Sleeping | Jaleel Shaw |
 | Naima | John Coltrane |
-| Red Herring | loopgarden |
-| Reflection | loopgarden |
 | Road to the West | SEATBELTS |
-| Silhouettes | loopgarden |
 | Space Lion | SEATBELTS |
 | Split | Teuteu |
-| Sungazing | loopgarden |
 | Sweden | C418 |
 | Tears in the Rain | Vangelis |
 | The Star-Crossed Lovers | Duke Ellington |
