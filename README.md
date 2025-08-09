@@ -1,7 +1,7 @@
 # saturn.fm
 Welcome to saturn.fm, a place for jazz fans and those who seek peace and solitude in the calming tunes of the saxophone. Put on your headphones, lean back your chair, and let the voices of saturn.fm take you to the stars and beyond.
 
-![demogif](demo.gif)
+![demopng](demo.png)
 
 ## Installation
 To begin your journey, simply enter:
@@ -32,6 +32,8 @@ and the shuf command which is part of the GNU Coreutils package:
 ```bash
 brew install coreutils
 ```
+
+(Hint: Use font size 13 with  BlexMono [Nerd Font](https://www.nerdfonts.com/font-downloads) for best results)
 
 ## Development
 Working on a feature using ffmpeg to analyze the volume of the current mp3 and sync the decible level with the animation to produce a true audio visualizer. 
