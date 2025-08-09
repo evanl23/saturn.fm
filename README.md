@@ -20,6 +20,8 @@ Then to listen, simply run:
 saturn.fm
 ```
 
+(Hint: Use font size 13 with  BlexMono [Nerd Font](https://www.nerdfonts.com/font-downloads) for best results)
+
 ## Requirements
 Your terminal must support true color (24 bit), or else some colors will not render correctly. This program also relies on a couple external tools: 
 
@@ -32,8 +34,6 @@ and the shuf command which is part of the GNU Coreutils package:
 ```bash
 brew install coreutils
 ```
-
-(Hint: Use font size 13 with  BlexMono [Nerd Font](https://www.nerdfonts.com/font-downloads) for best results)
 
 ## Development
 Working on a feature using ffmpeg to analyze the volume of the current mp3 and sync the decible level with the animation to produce a true audio visualizer. 
