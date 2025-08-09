@@ -14,7 +14,6 @@ MIN_LINES=49
 
 # Global state
 BG_JOB=
-AMPLITUDE_JOB=
 NOW_PLAYING=false
 PIPE=
 CURRENT_FRAME=0
@@ -76,16 +75,7 @@ cleanup() {
 		rm -f "$PIPE"
 	fi
 
-  if [[ -n $TMP_FRAME_DIR ]]; then
-    echo "removing temporary frame directory: $TMP_FRAME_DIR"
-	  rm -rf "$TMP_FRAME_DIR"
-  fi
-  
-  # Clean up any remaining ffmpeg processes (using global AMPLITUDE_JOB)
-  if [[ -n "$AMPLITUDE_JOB" ]]; then 
-    kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
-    wait "$AMPLITUDE_JOB" 2>/dev/null || true
-  fi
+	rm -rf "$TMP_FRAME_DIR"
 
 	# call to action
 	echo
@@ -104,19 +94,6 @@ cleanup() {
 		echo 'and killing any pids found'
 		echo
 		echo '$ pgrep ffplay'
-		echo
-	fi
-
-	# look for any stray ffmpeg processes (same pattern as ffplay)
-	local ffmpeg_output
-	ffmpeg_output=$(pgrep ffmpeg 2>/dev/null)
-	if [[ -n $ffmpeg_output ]]; then
-		echo '!!! warning: stray ffmpeg processes possibly found !!!'
-		echo 'These may be leftover amplitude analysis processes'
-		echo 'IF YOU ARE STILL SEEING ISSUES try running the following'
-		echo 'and killing any pids found'
-		echo
-		echo '$ pgrep ffmpeg'
 		echo
 	fi
 
@@ -161,31 +138,31 @@ draw-box() {
 
 # draw only the Saturn frame (no screen clearing to prevent flicker)
 draw_saturn_frame() { 
-  local frame_file="$TMP_FRAME_DIR/saturn-frames/frame${CURRENT_FRAME}.txt"
+	local frame_file="$TMP_FRAME_DIR/saturn-frames/frame${CURRENT_FRAME}.txt"
   
-  local frame_width=136
-  local frame_height=40  # approximate height of Saturn frames
+	local frame_width=136
+	local frame_height=40  # approximate height of Saturn frames
 
-  # Center both horizontally and vertically, then adjust up and right
-  local row_pos=$(( (LINES - frame_height) / 2 - 5 ))  # Move up by 5 rows
-  local col_pos=$(( (COLUMNS - frame_width) / 2 - 10 )) # Move right by 10 columns
+	# Center both horizontally and vertically, then adjust up and right
+	local row_pos=$(( (LINES - frame_height) / 2 - 5 ))  # Move up by 5 rows
+	local col_pos=$(( (COLUMNS - frame_width) / 2 - 10 )) # Move right by 10 columns
 
-  # Ensure we don't go negative or beyond screen bounds
-  if (( col_pos < 0 )); then
-    col_pos=0
-  fi
-  if (( row_pos < 0 )); then
-    row_pos=0
-  fi
+	# Ensure we don't go negative or beyond screen bounds
+	if (( col_pos < 0 )); then
+		col_pos=0
+	fi
+	if (( row_pos < 0 )); then
+		row_pos=0
+	fi
 
-  if [[ -f "$frame_file" ]]; then
-    local line_num=0
-    while IFS= read -r line; do
-      tput cup "$((row_pos + line_num))" "$col_pos"
-      printf "%s" "$line"
-      ((line_num++))
-    done < "$frame_file"
-  fi
+	if [[ -f "$frame_file" ]]; then
+		local line_num=0
+		while IFS= read -r line; do
+			tput cup "$((row_pos + line_num))" "$col_pos"
+      		printf "%s" "$line"
+			((line_num++))
+		done < "$frame_file"
+	fi
 }
 
 # draw only the user menu at the bottom
@@ -239,42 +216,42 @@ draw_menu() {
 }
 
 draw_title() {
-  local max_width=0
-  local line_count=0
+	local max_width=0
+	local line_count=0
   
-  # Read the ASCII art to find its dimensions
-  while IFS= read -r line; do
-    local line_length=${#line}
-    if (( line_length > max_width )); then
-      max_width=$line_length
-    fi
-    ((line_count++))
-  done << 'EOF'
+	# Read the ASCII art to find its dimensions
+	while IFS= read -r line; do
+		local line_length=${#line}
+		if (( line_length > max_width )); then
+			max_width=$line_length
+		fi
+		((line_count++))
+	done << 'EOF'
  ▗▄▄▖     ▗▄▖     ▗▄▄▄▖    ▗▖ ▗▖    ▗▄▄▖     ▗▖  ▗▖                ▗▄▄▄▖    ▗▖  ▗▖
 ▐▌       ▐▌ ▐▌      █      ▐▌ ▐▌    ▐▌ ▐▌    ▐▛▚▖▐▌                ▐▌       ▐▛▚▞▜▌
  ▝▀▚▖    ▐▛▀▜▌      █      ▐▌ ▐▌    ▐▛▀▚▖    ▐▌ ▝▜▌                ▐▛▀▀▘    ▐▌  ▐▌
 ▗▄▄▞▘    ▐▌ ▐▌      █      ▝▚▄▞▘    ▐▌ ▐▌    ▐▌  ▐▌       ▐▌       ▐▌       ▐▌  ▐▌
 EOF
   
-  # Calculate centered position
-  local row_pos=$(( (LINES - line_count) / 2 ))
-  local col_pos=$(( (COLUMNS - max_width) / 2 ))
+	# Calculate centered position
+	local row_pos=$(( (LINES - line_count) / 2 ))
+	local col_pos=$(( (COLUMNS - max_width) / 2 ))
   
-  if (( col_pos < 0 )); then
-    col_pos=0
-  fi
-  if (( row_pos < 0 )); then
-    row_pos=0
-  fi
+	if (( col_pos < 0 )); then
+		col_pos=0
+	fi
+	if (( row_pos < 0 )); then
+		row_pos=0
+	fi
   
-  # Draw the ASCII art
-  tput sgr0 
-  local line_num=0
-  while IFS= read -r line; do
-    tput cup "$((row_pos + line_num))" "$col_pos"
-    printf "%s" "$line"
-    ((line_num++))
-  done << 'EOF'
+	# Draw the ASCII art
+	tput sgr0 
+	local line_num=0
+	while IFS= read -r line; do
+		tput cup "$((row_pos + line_num))" "$col_pos"
+		printf "%s" "$line"
+		((line_num++))
+	done << 'EOF'
  ▗▄▄▖     ▗▄▖     ▗▄▄▄▖    ▗▖ ▗▖    ▗▄▄▖     ▗▖  ▗▖                ▗▄▄▄▖    ▗▖  ▗▖
 ▐▌       ▐▌ ▐▌      █      ▐▌ ▐▌    ▐▌ ▐▌    ▐▛▚▖▐▌                ▐▌       ▐▛▚▞▜▌
  ▝▀▚▖    ▐▛▀▜▌      █      ▐▌ ▐▌    ▐▛▀▚▖    ▐▌ ▝▜▌                ▐▛▀▀▘    ▐▌  ▐▌
@@ -295,17 +272,11 @@ stop_music() {
 		kill "$BG_JOB" 2>/dev/null
 		BG_JOB=
 	fi
-  if [[ -n $AMPLITUDE_JOB ]]; then
-		# Kill the ffmpeg process group (includes all subprocesses/pipes)
-		kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
-		wait "$AMPLITUDE_JOB" 2>/dev/null || true
-		AMPLITUDE_JOB=
-	fi
 	IS_PLAYING=false
 }
 
 make_url() {
-  curl -s "http://$BASE_URL/songs/" | grep -oE 'href="[^"]+\.(mp3|wav|m4a|ogg|flac)"' | cut -d'"' -f2 | shuf -n 1 | awk -v base="http://$BASE_URL/songs/" '{ print base $0 }'	
+	curl -s "http://$BASE_URL/songs/" | grep -oE 'href="[^"]+\.(mp3|wav|m4a|ogg|flac)"' | cut -d'"' -f2 | shuf -n 1 | awk -v base="http://$BASE_URL/songs/" '{ print base $0 }'	
 }
 
 # play a random music file
@@ -328,49 +299,16 @@ play_music() {
 # background task to play music and report status
 play_music_task() {
 	local file="$1"
- 
+	
 	# use ffplay to play the file
 	ffplay -hide_banner -loglevel panic -autoexit -nodisp "$file" &
-  local ffplay_pid=$!
-
-  frame_count=0
-  skip_n=5  # Only process 1 of every 5 frames
-
-  # start amplitude reader in background
-  (
-    exec ffmpeg -i "$file" -vn -af "astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level" -f null - 2>&1 | grep --line-buffered "lavfi.astats.Overall.RMS_level" | stdbuf -oL awk -F'=' '/RMS_level/ { print $2 }' | while read -r db; do
-      [[ -z "$db" ]] && continue
-
-      frame_count=$((frame_count + 1))
-      if (( frame_count % skip_n != 0 )); then
-        continue  # Skip this frame
-      fi
-
-      clamped=$(awk -v d="$db" 'BEGIN { print (d < -50 ? -50 : (d > 0 ? 0 : d)) }')
-      index=$(awk -v d="$clamped" 'BEGIN { printf "%02d", int(98 * (50 + d) / 50) }')
-      # Write frame update to pipe if it exists
-      if [[ -p "$PIPE" ]]; then
-        echo "frame-update" "$index" >&3 2>/dev/null || true
-      fi
-      sleep 0.13
-    done
-  ) &
-  local ffmpeg_pid=$!
-
-  # Store both PIDs for cleanup
-	echo 'music-start' "$ffplay_pid" "$ffmpeg_pid" >&3 2>/dev/null || true
 	
-	wait "$ffplay_pid"
+	local pid=$!
+	echo 'music-start' "$pid" >&3
+	
+	wait "$pid"
 	local code=$?
-
-	# Improved cleanup for ffmpeg
-	# Ensure ffmpeg ends after ffplay
-	if kill -0 "$ffmpeg_pid" 2>/dev/null; then
-	    kill -- -"$ffmpeg_pid" 2>/dev/null || true
-		wait "$ffmpeg_pid" 2>/dev/null || true
-	fi
-
-	echo 'music-stop' "$ffplay_pid" "$code" >&3 2>/dev/null || true
+	echo 'music-stop' "$pid" "$code" >&3
 }
 
 # demo music task (plays a tone if no music files are found)
@@ -400,7 +338,7 @@ read_keyboard_events_task() {
 		case "$data" in
 			'q') output='key-quit';;   # q for quit
 			'') output='key-enter';;  # enter key
-      'n') output='key-next';;   # n for next song
+      			'n') output='key-next';;   # n for next song
 		esac
 
 		if [[ -n $output ]]; then
@@ -565,35 +503,23 @@ main() {
 				key-quit)
 					exit 0
 					;;
-			  key-next)
-	        stop_music
-          play_music
-          ;;
+			    key-next)
+			    	stop_music
+			    	play_music
+			        ;;
 				music-start)
-          # music started playing - record the PIDs
-					local ffplay_pid=${args[0]}
-					local ffmpeg_pid=${args[1]}
+					# music started playing - record the PID
+					local pid=${args[0]}
 					
 					# kill any existing music (shouldn't happen, but just in case)
 					if [[ -n $BG_JOB ]]; then
 						kill "$BG_JOB" 2>/dev/null
 					fi
-					if [[ -n $AMPLITUDE_JOB ]]; then
-						# Kill the ffmpeg process group (includes all subprocesses/pipes)
-						kill -- -"$AMPLITUDE_JOB" 2>/dev/null || true
-						wait "$AMPLITUDE_JOB" 2>/dev/null || true
-					fi
 					
-					BG_JOB=$ffplay_pid
-					AMPLITUDE_JOB=$ffmpeg_pid
+					BG_JOB=$pid
 					IS_PLAYING=true
 					# update menu when music starts
 					draw_menu
-					;;
-        frame-update)
-					# update current frame from amplitude analysis
-					local new_frame=${args[0]}
-					CURRENT_FRAME="$new_frame"
 					;;
 				music-stop)
 					local pid=${args[0]}
@@ -617,12 +543,21 @@ main() {
 			esac
 		fi
 
-		if $IS_PLAYING; then
-			draw_saturn_frame 
-		fi
+		# animate and redraw Saturn at regular intervals
+		((loop_count++))
+		if ((loop_count >= frame_interval)); then
+			# animate Saturn frame only when music is playing
+			if $IS_PLAYING; then
+				((CURRENT_FRAME = (CURRENT_FRAME + 1) % frame_count))
+				# only redraw Saturn frame when animating
+				draw_saturn_frame 
+			fi
 			
+			loop_count=0
+		fi
+		
 		# small delay to prevent excessive CPU usage
-		_sleep 0.01
+		_sleep 0.0075
 	done
 
 	fatal 'not reached'
