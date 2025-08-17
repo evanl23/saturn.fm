@@ -67,6 +67,7 @@ Feel free to add potential features or songs of the similar nature by opening PR
 | Muna's Dream | Jaleel Shaw |
 | Muna's Sleeping | Jaleel Shaw |
 | Naima | John Coltrane |
+| Old Jazzman | Nevelskiy |
 | Red Herring | loopgarden |
 | Reflection | loopgarden |
 | Road to the West | SEATBELTS |
